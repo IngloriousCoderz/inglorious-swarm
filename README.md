@@ -1,4 +1,4 @@
-# @inglorious/swarm 🐝
+# @inglorious/storm 🐝
 
 A multi-agent coding orchestrator powered by local Ollama models.
 
@@ -51,19 +51,19 @@ ollama serve
 ### 4. Install globally
 
 ```bash
-pnpm add -g @inglorious/swarm
+pnpm add -g @inglorious/storm
 ```
 
 Or if you prefer npm:
 
 ```bash
-npm install -g @inglorious/swarm
+npm install -g @inglorious/storm
 ```
 
 For local development (changes take effect immediately):
 
 ```bash
-cd /path/to/inglorious-swarm
+cd /path/to/inglorious-storm
 pnpm link --global
 ```
 
@@ -73,38 +73,38 @@ pnpm link --global
 
 ```bash
 # From your project root
-swarm "add input validation to the login form"
+storm "add input validation to the login form"
 
 # Specify the project path explicitly
-swarm "add input validation to the login form" --project /path/to/myproject
+storm "add input validation to the login form" --project /path/to/myproject
 
 # Point at a remote Ollama instance (e.g. your Windows machine)
-OLLAMA_HOST=http://192.168.x.x:11434 swarm "your task"
+OLLAMA_HOST=http://192.168.x.x:11434 storm "your task"
 
 # Skip skill loading for a plain project
-swarm "your task" --no-skills
+storm "your task" --no-skills
 ```
 
-After the swarm finishes, open VS Code and review the diff. Commit when happy.
+After the storm finishes, open VS Code and review the diff. Commit when happy.
 
 ---
 
 ## Skills
 
-swarm supports the [SKILL.md](https://agentskills.io) open standard. If your
+storm supports the [SKILL.md](https://agentskills.io) open standard. If your
 project has skills installed, the agents will automatically discover and use them
 to produce idiomatic, framework-aware code.
 
 ### How it works
 
-1. On startup, swarm scans for a skills directory in your project (`.claude/skills/`,
+1. On startup, storm scans for a skills directory in your project (`.claude/skills/`,
    `.agents/skills/`, `.codex/skills/`, or `skills/`).
 2. If found, the **Planner** reads the `SKILL.md` index and selects only the skill
    files relevant to your task.
 3. The selected skill files are loaded in full and injected into the **Coder** and
    **Tester** prompts, grounding them in your actual patterns and conventions.
 
-This means if you're working on an `@inglorious/web` project and ask the swarm to
+This means if you're working on an `@inglorious/web` project and ask the storm to
 add a table component, it will write `render(entity, api)` code — not React.
 
 ### Installing skills
@@ -114,7 +114,7 @@ add a table component, it will write `render(entity, api)` code — not React.
 npx skills add https://github.com/ingloriouscoderz/forge-skills --skill forge-skills
 ```
 
-Skills are installed once per project and reused across all subsequent swarm runs.
+Skills are installed once per project and reused across all subsequent storm runs.
 Any skill set compatible with the SKILL.md standard works automatically.
 
 ---
@@ -134,7 +134,7 @@ All settings via environment variables — no config files to manage:
 | `MAX_ITERATIONS` | `3`                                 | Max coder→critic loops                 |
 | `MAX_FILE_CHARS` | `12000`                             | Max chars per file in prompts          |
 
-Per-project tip — add a `.swarmrc.sh` in your project and source it before running:
+Per-project tip — add a `.stormrc.sh` in your project and source it before running:
 
 ```bash
 export OLLAMA_HOST=http://192.168.x.x:11434
@@ -188,8 +188,8 @@ export MAX_ITERATIONS=2
 ## Project structure
 
 ```
-inglorious-swarm/
-├── swarm.js          # entry point + CLI
+inglorious-storm/
+├── storm.js          # entry point + CLI
 ├── config.js         # all settings
 ├── package.json
 ├── agents/

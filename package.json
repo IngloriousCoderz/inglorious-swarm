@@ -1,13 +1,13 @@
 {
-  "name": "@inglorious/swarm",
+  "name": "@inglorious/storm",
   "version": "0.1.0",
-  "description": "Multi-agent coding swarm powered by local Ollama models",
+  "description": "Multi-agent coding storm powered by local Ollama models",
   "type": "module",
   "bin": {
-    "swarm": "./swarm.js"
+    "storm": "./storm.js"
   },
   "files": [
-    "swarm.js",
+    "storm.js",
     "config.js",
     "agents/",
     "tools/",
@@ -21,7 +21,7 @@
     "agents",
     "ollama",
     "coding",
-    "swarm"
+    "storm"
   ],
   "author": "Matteo Antony Mistretta",
   "license": "MIT"

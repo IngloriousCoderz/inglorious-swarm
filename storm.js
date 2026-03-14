@@ -26,10 +26,10 @@ const { values, positionals } = parseArgs({
 
 if (values.help || positionals.length === 0) {
   console.log(`
-swarm 🐝 — multi-agent coding orchestrator
+storm 🐝 — multi-agent coding orchestrator
 
 Usage:
-  swarm "your task" [--project /path/to/project] [--no-skills]
+  storm "your task" [--project /path/to/project] [--no-skills]
 
 Options:
   --project, -p   Path to the project root (default: current directory)
@@ -70,7 +70,7 @@ function printSummary(writtenFiles, testResult) {
 async function run(task, projectRoot) {
   projectRoot = path.resolve(projectRoot)
 
-  console.log(`\n🐝 SWARM starting`)
+  console.log(`\n🐝 STORM starting`)
   console.log(`   Task    : ${task}`)
   console.log(`   Project : ${projectRoot}`)
   console.log(`   Ollama  : ${OLLAMA_HOST}`)
@@ -157,7 +157,7 @@ async function run(task, projectRoot) {
     lastTestResult = testResult
 
     if (review.approved) {
-      console.log(`\n🎉 Swarm complete in ${i} iteration(s).`)
+      console.log(`\n🎉 Storm complete in ${i} iteration(s).`)
       console.log(
         "   Files are on disk. Review the diff in VS Code and commit when ready.",
       )
