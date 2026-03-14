@@ -1,5 +1,5 @@
-import { chat } from '../tools/ollama.js'
-import { MODELS } from '../config.js'
+import { chat } from "../tools/ollama.js"
+import { MODELS } from "../config.js"
 
 const SYSTEM = `You are a senior code reviewer. You will receive:
 - The original implementation plan
@@ -37,22 +37,22 @@ Do NOT reject for:
  */
 export async function critique(plan, changes, testResult) {
   const changesSummary = Object.entries(changes)
-    .filter(([p]) => !p.startsWith('__'))
+    .filter(([p]) => !p.startsWith("__"))
     .map(([p, c]) => `### ${p}\n\`\`\`\n${c}\n\`\`\``)
-    .join('\n\n')
+    .join("\n\n")
 
   const user =
     `## Plan\n${plan}\n\n` +
     `## Code Changes\n${changesSummary}\n\n` +
-    `## Test Results\nStatus: ${testResult.passed ? 'PASSED ✅' : 'FAILED ❌'}\n\n\`\`\`\n${testResult.output}\n\`\`\`\n\n` +
+    `## Test Results\nStatus: ${testResult.passed ? "PASSED ✅" : "FAILED ❌"}\n\n\`\`\`\n${testResult.output}\n\`\`\`\n\n` +
     `Review the implementation and decide: APPROVE or REJECT.`
 
-  console.log('🔍 Critic reviewing...')
+  console.log("🔍 Critic reviewing...")
   const result = await chat(MODELS.critic, SYSTEM, user)
 
-  const firstLine = result.trim().split('\n')[0].toUpperCase()
-  const approved = firstLine.includes('APPROVED')
-  console.log(approved ? '  ✅ Approved' : '  ❌ Rejected')
+  const firstLine = result.trim().split("\n")[0].toUpperCase()
+  const approved = firstLine.includes("APPROVED")
+  console.log(approved ? "  ✅ Approved" : "  ❌ Rejected")
 
   return { approved, feedback: result }
 }

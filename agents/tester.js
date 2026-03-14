@@ -1,7 +1,7 @@
-import { chat } from '../tools/ollama.js'
-import { parseFileBlocks, applyChanges } from '../tools/files.js'
-import { runTests } from '../tools/shell.js'
-import { MODELS, TEST_COMMAND } from '../config.js'
+import { chat } from "../tools/ollama.js"
+import { parseFileBlocks, applyChanges } from "../tools/files.js"
+import { runTests } from "../tools/shell.js"
+import { MODELS, TEST_COMMAND } from "../config.js"
 
 const SYSTEM = `You are a QA engineer. You will receive:
 - An implementation plan
@@ -23,7 +23,8 @@ Rules:
 - Use Vitest syntax (describe, it, expect).
 - Import only from paths that exist in the codebase.
 - Do not modify non-test files.
-- Keep tests focused and minimal — test behaviour, not implementation.`
+- Keep tests focused and minimal — test behaviour, not implementation.
+- If skill references are provided, follow their testing patterns precisely.`
 
 /**
  * 1. Ask the tester model if new tests are needed and generate them.
@@ -33,35 +34,42 @@ Rules:
  * @param {string} plan
  * @param {Record<string, string>} changes
  * @param {string} projectRoot
+ * @param {string} skillContent  Optional concatenated skill file content
  * @returns {Promise<{ passed: boolean, output: string, newTests: Record<string, string> }>}
  */
-export async function test(plan, changes, projectRoot) {
+export async function test(plan, changes, projectRoot, skillContent = "") {
   const changesSummary = Object.entries(changes)
-    .filter(([p]) => !p.startsWith('__'))
+    .filter(([p]) => !p.startsWith("__"))
     .map(([p, c]) => `### ${p}\n\`\`\`\n${c}\n\`\`\``)
-    .join('\n\n')
+    .join("\n\n")
 
-  const user = `## Implementation Plan\n${plan}\n\n## Changed Files\n${changesSummary}\n\nReview the changes and write any missing tests, or reply NO_NEW_TESTS.`
+  const skillSection = skillContent
+    ? `\n## Skill References\nFollow these testing patterns:\n\n${skillContent}\n`
+    : ""
 
-  console.log('🧪 Tester reviewing changes...')
+  const user = `## Implementation Plan\n${plan}\n${skillSection}\n## Changed Files\n${changesSummary}\n\nReview the changes and write any missing tests, or reply NO_NEW_TESTS.`
+
+  console.log("🧪 Tester reviewing changes...")
   const result = await chat(MODELS.tester, SYSTEM, user)
 
   let newTests = {}
-  if (!result.toUpperCase().includes('NO_NEW_TESTS')) {
+  if (!result.toUpperCase().includes("NO_NEW_TESTS")) {
     newTests = parseFileBlocks(result)
     if (Object.keys(newTests).length > 0) {
-      console.log(`  ✓ Tester wrote ${Object.keys(newTests).length} test file(s): ${Object.keys(newTests).join(', ')}`)
+      console.log(
+        `  ✓ Tester wrote ${Object.keys(newTests).length} test file(s): ${Object.keys(newTests).join(", ")}`,
+      )
       applyChanges(projectRoot, newTests)
     } else {
-      console.log('  ℹ️  Tester returned no parseable test blocks.')
+      console.log("  ℹ️  Tester returned no parseable test blocks.")
     }
   } else {
-    console.log('  ✓ Tester: existing tests are sufficient.')
+    console.log("  ✓ Tester: existing tests are sufficient.")
   }
 
   console.log(`  ▶ Running: ${TEST_COMMAND}`)
   const testResult = runTests(projectRoot)
-  console.log(testResult.passed ? '  ✅ passed' : '  ❌ failed')
+  console.log(testResult.passed ? "  ✅ passed" : "  ❌ failed")
 
   return { ...testResult, newTests }
 }

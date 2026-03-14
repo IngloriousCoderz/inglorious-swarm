@@ -10,12 +10,19 @@
     "swarm.js",
     "config.js",
     "agents/",
-    "tools/"
+    "tools/",
+    "README.md"
   ],
   "engines": {
     "node": ">=18.0.0"
   },
-  "keywords": ["ai", "agents", "ollama", "coding", "swarm"],
+  "keywords": [
+    "ai",
+    "agents",
+    "ollama",
+    "coding",
+    "swarm"
+  ],
   "author": "Matteo Antony Mistretta",
   "license": "MIT"
 }
