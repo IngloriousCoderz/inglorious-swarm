@@ -1,0 +1,21 @@
+{
+  "name": "@inglorious/swarm",
+  "version": "0.1.0",
+  "description": "Multi-agent coding swarm powered by local Ollama models",
+  "type": "module",
+  "bin": {
+    "swarm": "./swarm.js"
+  },
+  "files": [
+    "swarm.js",
+    "config.js",
+    "agents/",
+    "tools/"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["ai", "agents", "ollama", "coding", "swarm"],
+  "author": "Matteo Antony Mistretta",
+  "license": "MIT"
+}
