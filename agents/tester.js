@@ -27,24 +27,27 @@ Rules:
 - If skill references are provided, follow their testing patterns precisely.`
 
 /**
- * 1. Ask the tester model if new tests are needed and generate them.
- * 2. Write any new test files to disk.
- * 3. Run the test suite.
- * 4. Return { passed, output, newTests }
  * @param {string} plan
  * @param {Record<string, string>} changes
  * @param {string} projectRoot
- * @param {string} skillContent  Optional concatenated skill file content
+ * @param {string} skillContent
+ * @param {boolean} dryRun  If true, generate tests but do not write them
  * @returns {Promise<{ passed: boolean, output: string, newTests: Record<string, string> }>}
  */
-export async function test(plan, changes, projectRoot, skillContent = "") {
+export async function test(
+  plan,
+  changes,
+  projectRoot,
+  skillContent = "",
+  dryRun = false,
+) {
   const changesSummary = Object.entries(changes)
     .filter(([p]) => !p.startsWith("__"))
     .map(([p, c]) => `### ${p}\n\`\`\`\n${c}\n\`\`\``)
     .join("\n\n")
 
   const skillSection = skillContent
-    ? `\n## Skill References\nFollow these testing patterns:\n\n${skillContent}\n`
+    ? `\n## Skill References\n${skillContent}\n`
     : ""
 
   const user = `## Implementation Plan\n${plan}\n${skillSection}\n## Changed Files\n${changesSummary}\n\nReview the changes and write any missing tests, or reply NO_NEW_TESTS.`
@@ -56,20 +59,27 @@ export async function test(plan, changes, projectRoot, skillContent = "") {
   if (!result.toUpperCase().includes("NO_NEW_TESTS")) {
     newTests = parseFileBlocks(result)
     if (Object.keys(newTests).length > 0) {
-      console.log(
-        `  ✓ Tester wrote ${Object.keys(newTests).length} test file(s): ${Object.keys(newTests).join(", ")}`,
-      )
-      applyChanges(projectRoot, newTests)
-    } else {
-      console.log("  ℹ️  Tester returned no parseable test blocks.")
+      if (dryRun) {
+        console.log(
+          `  ✓ Tester would write ${Object.keys(newTests).length} test file(s): ${Object.keys(newTests).join(", ")} (dry run — not written)`,
+        )
+      } else {
+        console.log(
+          `  ✓ Tester wrote ${Object.keys(newTests).length} test file(s): ${Object.keys(newTests).join(", ")}`,
+        )
+        applyChanges(projectRoot, newTests)
+      }
     }
   } else {
     console.log("  ✓ Tester: existing tests are sufficient.")
   }
 
+  if (dryRun) {
+    return { passed: true, output: "(dry run — tests not executed)", newTests }
+  }
+
   console.log(`  ▶ Running: ${TEST_COMMAND}`)
   const testResult = runTests(projectRoot)
   console.log(testResult.passed ? "  ✅ passed" : "  ❌ failed")
-
   return { ...testResult, newTests }
 }

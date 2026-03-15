@@ -22,10 +22,10 @@ Rules:
 
 /**
  * @param {string} plan
- * @param {string} projectContext      Full context (fallback)
- * @param {string} critique            Optional feedback from previous iteration
- * @param {string} skillContent        Optional skill file content
- * @param {string|null} focusedContext Only the files relevant to the plan (preferred)
+ * @param {string} projectContext
+ * @param {string} critique
+ * @param {string} skillContent
+ * @param {string|null} focusedContext
  * @returns {Promise<Record<string, string>>}
  */
 export async function code(
@@ -39,11 +39,11 @@ export async function code(
   const contextLabel = focusedContext ? "focused" : "full"
 
   const critiqueSection = critique
-    ? `\n## Previous attempt was rejected — Critique\n${critique}\n`
+    ? `\n## Previous attempt was rejected — Critique\n${critique.slice(0, 1500)}\n`
     : ""
 
   const skillSection = skillContent
-    ? `\n## Skill References\nFollow these patterns and conventions:\n\n${skillContent}\n`
+    ? `\n## Skill References\n${skillContent}\n`
     : ""
 
   const user =
@@ -52,10 +52,11 @@ export async function code(
     skillSection +
     `\n## Codebase (${contextLabel})\n${context}\n\nImplement the changes now.`
 
-  const label = critique
-    ? "🔄 Coder iterating (critique applied)..."
-    : "💻 Coder implementing..."
-  console.log(label)
+  console.log(
+    critique
+      ? "🔄 Coder iterating (critique applied)..."
+      : "💻 Coder implementing...",
+  )
 
   const result = await chat(
     MODELS.coder,
@@ -74,7 +75,7 @@ export async function code(
   }
 
   console.log(
-    `  ✓ ${Object.keys(changes).length} file(s) to write: ${Object.keys(changes).join(", ")}`,
+    `  ✓ ${Object.keys(changes).length} file(s): ${Object.keys(changes).join(", ")}`,
   )
   return changes
 }

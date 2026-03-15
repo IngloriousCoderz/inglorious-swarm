@@ -12,8 +12,9 @@ Rules:
 - Do NOT write any code.
 - If the task is ambiguous, state your assumptions explicitly.
 - End with a one-line summary of the expected outcome.
-- On the very last line, output a machine-readable list of files to modify:
-  FILES: path/to/file1.js, path/to/file2.ts`
+- On the very last line, list ONLY the files that must be directly edited (not their imports or dependencies):
+  FILES: path/to/file1.js, path/to/file2.ts
+  Keep this list minimal — only files whose content will change.`
 
 const SKILL_SELECTOR_SYSTEM = `You are a tech lead selecting the minimum set of skill
 reference files needed to implement a task.

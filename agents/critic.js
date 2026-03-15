@@ -1,41 +1,27 @@
 import { chat } from "../tools/ollama.js"
 import { MODELS } from "../config.js"
 
-const SYSTEM = `You are a senior code reviewer. You will receive:
-- The original implementation plan
-- The code changes produced by the developer
-- The baseline test results (before the change)
-- The current test results (after the change)
+const SYSTEM = `You are a senior code reviewer deciding whether to APPROVE or REJECT a code change.
 
-Your job is to decide: APPROVE or REJECT.
+Reply with APPROVED or REJECTED on the very first line, nothing before it.
 
-If APPROVE: reply with exactly this on the first line:
-APPROVED
-Then optionally add a short note (1-3 lines max).
+APPROVE if:
+- The implementation matches the plan
+- No new test failures were introduced (tests that failed before may still fail)
+- No obvious bugs or security issues
 
-If REJECT: reply with exactly this on the first line:
-REJECTED
-Then provide a concise, actionable critique — specific issues only, no padding.
-The developer will use your critique to fix the code, so be precise.
+REJECT only if:
+- A test that was PASSING in the baseline is now FAILING
+- The implementation clearly does not match the plan
+- The code introduces an obvious bug or security issue
 
-Rejection criteria (reject if ANY of these are true):
-- Tests that were PASSING before are now FAILING due to the new code
-- The implementation does not match the plan
-- The code introduces obvious bugs or security issues
-- The code style deviates significantly from the existing codebase
-
-Do NOT reject for:
-- Minor style preferences
-- Test failures that were already present in the baseline (before the change)
-- Missing documentation (unless the plan required it)
-- No test files found, if that was already the case in the baseline`
+Do NOT reject for style, missing docs, or pre-existing failures.`
 
 /**
- * Review the implementation and test results.
  * @param {string} plan
  * @param {Record<string, string>} changes
- * @param {{ passed: boolean, output: string }} testResult   After the change
- * @param {{ passed: boolean, output: string }} baseline     Before the change
+ * @param {{ passed: boolean, output: string }} testResult
+ * @param {{ passed: boolean, output: string }} baseline
  * @returns {Promise<{ approved: boolean, feedback: string }>}
  */
 export async function critique(plan, changes, testResult, baseline) {
@@ -44,16 +30,26 @@ export async function critique(plan, changes, testResult, baseline) {
     .map(([p, c]) => `### ${p}\n\`\`\`\n${c}\n\`\`\``)
     .join("\n\n")
 
-  const baselineSection = baseline
-    ? `## Baseline Test Results (before this change)\nStatus: ${baseline.passed ? "PASSED ✅" : "FAILED ❌"}\n\`\`\`\n${baseline.output}\n\`\`\`\n\n`
-    : ""
+  // Pre-compute the test status delta so the model doesn't have to reason about it
+  const baselinePassed = baseline?.passed ?? false
+  const nowPassed = testResult.passed
+  let testDelta
+  if (!baselinePassed && !nowPassed) {
+    testDelta = `⚠️  Tests were already failing before this change and are still failing. This is a PRE-EXISTING issue — do NOT reject for this.`
+  } else if (baselinePassed && nowPassed) {
+    testDelta = `✅ Tests were passing before and are still passing.`
+  } else if (!baselinePassed && nowPassed) {
+    testDelta = `✅ Tests were failing before and are now passing. Improvement.`
+  } else {
+    testDelta = `❌ Tests were passing before but are now failing. This was caused by the change.`
+  }
 
   const user =
     `## Plan\n${plan}\n\n` +
     `## Code Changes\n${changesSummary}\n\n` +
-    baselineSection +
-    `## Current Test Results (after this change)\nStatus: ${testResult.passed ? "PASSED ✅" : "FAILED ❌"}\n\`\`\`\n${testResult.output}\n\`\`\`\n\n` +
-    `Review the implementation and decide: APPROVE or REJECT.`
+    `## Test Status\n${testDelta}\n\n` +
+    `## Test Output\n\`\`\`\n${testResult.output.slice(0, 2000)}\n\`\`\`\n\n` +
+    `APPROVE or REJECT?`
 
   console.log("🔍 Critic reviewing...")
   const result = await chat(MODELS.critic, SYSTEM, user)
