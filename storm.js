@@ -2,12 +2,18 @@
 import path from "node:path"
 import { parseArgs } from "node:util"
 import { MODELS, OLLAMA_HOST, TEST_COMMAND, MAX_ITERATIONS } from "./config.js"
-import { readProjectContext, applyChanges } from "./tools/files.js"
+import {
+  readProjectContext,
+  applyChanges,
+  isNonSourceChange,
+} from "./tools/files.js"
 import {
   findSkillsDir,
   loadSkillsIndex,
   loadSelectedSkills,
 } from "./tools/skills.js"
+import { runTests } from "./tools/shell.js"
+import { startTimer, elapsed, formatTimings } from "./tools/timer.js"
 import { plan } from "./agents/planner.js"
 import { code } from "./agents/coder.js"
 import { test } from "./agents/tester.js"
@@ -26,7 +32,7 @@ const { values, positionals } = parseArgs({
 
 if (values.help || positionals.length === 0) {
   console.log(`
-storm 🐝 — multi-agent coding orchestrator
+storm ⚡ — multi-agent coding orchestrator
 
 Usage:
   storm "your task" [--project /path/to/project] [--no-skills]
@@ -50,11 +56,12 @@ Environment variables:
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-function divider(label) {
-  console.log(`\n${"─".repeat(60)}\n  ${label}\n${"─".repeat(60)}`)
+function divider(label, sinceMs) {
+  const time = sinceMs !== undefined ? `  ${elapsed(sinceMs)}` : ""
+  console.log(`\n${"─".repeat(60)}\n  ${label}${time}\n${"─".repeat(60)}`)
 }
 
-function printSummary(writtenFiles, testResult) {
+function printSummary(writtenFiles, testResult, timings) {
   console.log(`\n${"═".repeat(60)}`)
   console.log("  SUMMARY")
   console.log(`${"═".repeat(60)}`)
@@ -63,14 +70,18 @@ function printSummary(writtenFiles, testResult) {
   console.log(
     `  Tests          : ${testResult?.passed ? "✅ passing" : "❌ failing"}`,
   )
+  console.log(`\n  Timings`)
+  formatTimings(timings).forEach((line) => console.log(line))
   console.log(`${"═".repeat(60)}\n`)
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
 async function run(task, projectRoot) {
   projectRoot = path.resolve(projectRoot)
+  const totalStart = startTimer()
+  const timings = {}
 
-  console.log(`\n🐝 STORM starting`)
+  console.log(`\n⚡ STORM starting`)
   console.log(`   Task    : ${task}`)
   console.log(`   Project : ${projectRoot}`)
   console.log(`   Ollama  : ${OLLAMA_HOST}`)
@@ -87,9 +98,7 @@ async function run(task, projectRoot) {
     skillsDir = findSkillsDir(projectRoot)
     if (skillsDir) {
       skillsIndex = loadSkillsIndex(skillsDir)
-      if (skillsIndex) {
-        console.log(`   Skills  : ${skillsDir}`)
-      }
+      if (skillsIndex) console.log(`   Skills  : ${skillsDir}`)
     } else {
       console.log(
         `   Skills  : none found (run 'npx skills add <url>' to install)`,
@@ -99,7 +108,17 @@ async function run(task, projectRoot) {
     console.log(`   Skills  : disabled`)
   }
 
+  // ── Baseline tests — run once before anything changes ─────────────────────
+  console.log(`\n  📊 Capturing baseline test results...`)
+  const baselineStart = startTimer()
+  const baseline = runTests(projectRoot)
+  timings["baseline"] = performance.now() - baselineStart
+  console.log(
+    `  Baseline: ${baseline.passed ? "✅ passing" : "❌ failing"}  (${elapsed(baselineStart)})`,
+  )
+
   // ── 1. PLAN ───────────────────────────────────────────────────────────────
+  const planStart = startTimer()
   divider("1 / 4  PLANNER")
   const projectContext = readProjectContext(projectRoot)
   const { plan: implementationPlan, selectedSkills } = await plan(
@@ -107,24 +126,27 @@ async function run(task, projectRoot) {
     projectContext,
     skillsIndex,
   )
+  timings["planner"] = performance.now() - planStart
   console.log(`\n${implementationPlan}\n`)
+  console.log(`  ⏱  ${elapsed(planStart)}`)
 
   // Load full content of selected skills for coder and tester
   const skillContent =
     skillsDir && selectedSkills.length > 0
       ? loadSelectedSkills(skillsDir, selectedSkills)
       : ""
-
-  if (skillContent) {
-    console.log(`  📚 Loaded skill content for: ${selectedSkills.join(", ")}`)
-  }
+  if (skillContent)
+    console.log(`  📚 Loaded skills: ${selectedSkills.join(", ")}`)
 
   // ── 2-4. CODE → TEST → REVIEW loop ────────────────────────────────────────
   let critiqueFeedback = ""
   let finalChanges = {}
-  let lastTestResult = {}
+  let lastTestResult = baseline
+  let lastWritten = []
 
   for (let i = 1; i <= MAX_ITERATIONS; i++) {
+    // ── CODER ────────────────────────────────────────────────────────────────
+    const coderStart = startTimer()
     divider(`2 / 4  CODER  (iteration ${i}/${MAX_ITERATIONS})`)
     const changes = await code(
       implementationPlan,
@@ -132,6 +154,7 @@ async function run(task, projectRoot) {
       critiqueFeedback,
       skillContent,
     )
+    timings[`coder-${i}`] = performance.now() - coderStart
 
     if (changes.__raw__) {
       console.log("\n⚠️  Coder output could not be parsed. Stopping.")
@@ -141,17 +164,40 @@ async function run(task, projectRoot) {
 
     const written = applyChanges(projectRoot, changes)
     console.log(`  📝 Written: ${written.join(", ")}`)
+    console.log(`  ⏱  ${elapsed(coderStart)}`)
+    lastWritten = written
 
-    divider(`3 / 4  TESTER  (iteration ${i}/${MAX_ITERATIONS})`)
-    const testResult = await test(
+    // ── TESTER ───────────────────────────────────────────────────────────────
+    let testResult
+
+    if (isNonSourceChange(changes)) {
+      console.log(`\n  ⏭️  Tester skipped — no source files changed.`)
+      // Non-source changes can't break tests, so inherit baseline
+      testResult = { ...baseline, skipped: true }
+    } else {
+      const testerStart = startTimer()
+      divider(`3 / 4  TESTER  (iteration ${i}/${MAX_ITERATIONS})`)
+      testResult = await test(
+        implementationPlan,
+        changes,
+        projectRoot,
+        skillContent,
+      )
+      timings[`tester-${i}`] = performance.now() - testerStart
+      console.log(`  ⏱  ${elapsed(testerStart)}`)
+    }
+
+    // ── CRITIC ───────────────────────────────────────────────────────────────
+    const criticStart = startTimer()
+    divider(`4 / 4  CRITIC  (iteration ${i}/${MAX_ITERATIONS})`)
+    const review = await critique(
       implementationPlan,
       changes,
-      projectRoot,
-      skillContent,
+      testResult,
+      baseline,
     )
-
-    divider(`4 / 4  CRITIC  (iteration ${i}/${MAX_ITERATIONS})`)
-    const review = await critique(implementationPlan, changes, testResult)
+    timings[`critic-${i}`] = performance.now() - criticStart
+    console.log(`  ⏱  ${elapsed(criticStart)}`)
 
     finalChanges = changes
     lastTestResult = testResult
@@ -161,16 +207,13 @@ async function run(task, projectRoot) {
       console.log(
         "   Files are on disk. Review the diff in VS Code and commit when ready.",
       )
-      printSummary(written, testResult)
+      printSummary(written, testResult, timings)
       return
     }
 
     critiqueFeedback = review.feedback
     console.log(`\n  Critique:\n${critiqueFeedback}\n`)
-
-    if (i < MAX_ITERATIONS) {
-      console.log("  ↩️  Sending back to coder...")
-    }
+    if (i < MAX_ITERATIONS) console.log("  ↩️  Sending back to coder...")
   }
 
   // ── Exhausted iterations ──────────────────────────────────────────────────
@@ -180,7 +223,7 @@ async function run(task, projectRoot) {
   console.log(
     "   The last attempt is on disk. Review carefully before committing.",
   )
-  printSummary(Object.keys(finalChanges), lastTestResult)
+  printSummary(lastWritten, lastTestResult, timings)
 }
 
 run(positionals.join(" "), values.project).catch((err) => {

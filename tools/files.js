@@ -103,3 +103,25 @@ export function parseFileBlocks(text) {
   }
   return result
 }
+
+const SOURCE_EXTENSIONS = new Set([
+  ".js",
+  ".ts",
+  ".jsx",
+  ".tsx",
+  ".mjs",
+  ".cjs",
+  ".py",
+])
+
+/**
+ * Returns true if ALL changed files are non-source (docs, config, assets).
+ * Used to skip the tester when there's nothing testable to validate.
+ * @param {Record<string, string>} changes
+ * @returns {boolean}
+ */
+export function isNonSourceChange(changes) {
+  return Object.keys(changes)
+    .filter((p) => !p.startsWith("__"))
+    .every((p) => !SOURCE_EXTENSIONS.has(path.extname(p)))
+}
