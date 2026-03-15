@@ -1,10 +1,10 @@
 import { chat } from "../tools/ollama.js"
 import { parseFileBlocks } from "../tools/files.js"
-import { MODELS } from "../config.js"
+import { MODELS, OLLAMA_CODER_TIMEOUT } from "../config.js"
 
 const SYSTEM = `You are a senior developer implementing code changes.
-You will receive a plan and the current codebase. Output ONLY the files that
-need to be created or modified.
+You will receive a plan and the relevant files from the codebase.
+Output ONLY the files that need to be created or modified.
 
 Output format — strictly follow this for every file:
 ### path/to/file.ts
@@ -21,11 +21,11 @@ Rules:
 - If skill references are provided, follow their patterns and conventions precisely.`
 
 /**
- * Given a plan and project context, return { path: content } of changed files.
  * @param {string} plan
- * @param {string} projectContext
- * @param {string} critique       Optional feedback from a previous iteration
- * @param {string} skillContent   Optional concatenated skill file content
+ * @param {string} projectContext      Full context (fallback)
+ * @param {string} critique            Optional feedback from previous iteration
+ * @param {string} skillContent        Optional skill file content
+ * @param {string|null} focusedContext Only the files relevant to the plan (preferred)
  * @returns {Promise<Record<string, string>>}
  */
 export async function code(
@@ -33,7 +33,11 @@ export async function code(
   projectContext,
   critique = "",
   skillContent = "",
+  focusedContext = null,
 ) {
+  const context = focusedContext ?? projectContext
+  const contextLabel = focusedContext ? "focused" : "full"
+
   const critiqueSection = critique
     ? `\n## Previous attempt was rejected — Critique\n${critique}\n`
     : ""
@@ -42,14 +46,24 @@ export async function code(
     ? `\n## Skill References\nFollow these patterns and conventions:\n\n${skillContent}\n`
     : ""
 
-  const user = `## Implementation Plan\n${plan}\n${critiqueSection}${skillSection}\n## Codebase\n${projectContext}\n\nImplement the changes now.`
+  const user =
+    `## Implementation Plan\n${plan}\n` +
+    critiqueSection +
+    skillSection +
+    `\n## Codebase (${contextLabel})\n${context}\n\nImplement the changes now.`
 
   const label = critique
     ? "🔄 Coder iterating (critique applied)..."
     : "💻 Coder implementing..."
   console.log(label)
 
-  const result = await chat(MODELS.coder, SYSTEM, user)
+  const result = await chat(
+    MODELS.coder,
+    SYSTEM,
+    user,
+    0.2,
+    OLLAMA_CODER_TIMEOUT,
+  )
   const changes = parseFileBlocks(result)
 
   if (Object.keys(changes).length === 0) {

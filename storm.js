@@ -4,6 +4,7 @@ import { parseArgs } from "node:util"
 import { MODELS, OLLAMA_HOST, TEST_COMMAND, MAX_ITERATIONS } from "./config.js"
 import {
   readProjectContext,
+  readFocusedContext,
   applyChanges,
   isNonSourceChange,
 } from "./tools/files.js"
@@ -121,11 +122,11 @@ async function run(task, projectRoot) {
   const planStart = startTimer()
   divider("1 / 4  PLANNER")
   const projectContext = readProjectContext(projectRoot)
-  const { plan: implementationPlan, selectedSkills } = await plan(
-    task,
-    projectContext,
-    skillsIndex,
-  )
+  const {
+    plan: implementationPlan,
+    selectedSkills,
+    relevantFiles,
+  } = await plan(task, projectContext, skillsIndex)
   timings["planner"] = performance.now() - planStart
   console.log(`\n${implementationPlan}\n`)
   console.log(`  ⏱  ${elapsed(planStart)}`)
@@ -137,6 +138,15 @@ async function run(task, projectRoot) {
       : ""
   if (skillContent)
     console.log(`  📚 Loaded skills: ${selectedSkills.join(", ")}`)
+
+  const focusedContext = readFocusedContext(projectRoot, relevantFiles)
+  if (focusedContext) {
+    console.log(`  🎯 Focused context: ${relevantFiles.join(", ")}`)
+  } else {
+    console.log(
+      `  📂 Using full project context (planner identified no specific files)`,
+    )
+  }
 
   // ── 2-4. CODE → TEST → REVIEW loop ────────────────────────────────────────
   let critiqueFeedback = ""
@@ -153,6 +163,7 @@ async function run(task, projectRoot) {
       projectContext,
       critiqueFeedback,
       skillContent,
+      focusedContext,
     )
     timings[`coder-${i}`] = performance.now() - coderStart
 

@@ -125,3 +125,33 @@ export function isNonSourceChange(changes) {
     .filter((p) => !p.startsWith("__"))
     .every((p) => !SOURCE_EXTENSIONS.has(path.extname(p)))
 }
+
+/**
+ * Build a focused context string containing only the files relevant to the plan.
+ * Falls back to full project context if no relevant files were identified.
+ * @param {string}   root
+ * @param {string[]} relevantFiles  Paths identified by the planner
+ * @returns {string}
+ */
+export function readFocusedContext(root, relevantFiles) {
+  if (!relevantFiles || relevantFiles.length === 0) return null
+
+  // Normalise separators — planner may use / or \ depending on OS
+  const normalised = relevantFiles.map((f) => f.replaceAll("\\", "/"))
+  const allFiles = listFiles(root).map((f) => f.replaceAll("\\", "/"))
+
+  // Fuzzy match: accept if the file path ends with the relevant path
+  // e.g. "storm.js" matches "src/storm.js" and "storm.js"
+  const matched = allFiles.filter((f) =>
+    normalised.some(
+      (rel) => f === rel || f.endsWith("/" + rel) || rel.endsWith("/" + f),
+    ),
+  )
+
+  if (matched.length === 0) return null
+
+  const contents = readFiles(root, matched)
+  return Object.entries(contents)
+    .map(([p, c]) => `### ${p}\n\`\`\`\n${c}\n\`\`\``)
+    .join("\n\n")
+}

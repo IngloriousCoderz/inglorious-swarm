@@ -11,7 +11,9 @@ Rules:
 - Be concise: bullet points only, no padding.
 - Do NOT write any code.
 - If the task is ambiguous, state your assumptions explicitly.
-- End with a one-line summary of the expected outcome.`
+- End with a one-line summary of the expected outcome.
+- On the very last line, output a machine-readable list of files to modify:
+  FILES: path/to/file1.js, path/to/file2.ts`
 
 const SKILL_SELECTOR_SYSTEM = `You are a tech lead selecting the minimum set of skill
 reference files needed to implement a task.
@@ -26,14 +28,41 @@ skills/store.md
 If no skills are relevant, reply with: NONE`
 
 /**
+ * Parse the FILES: line from the planner output.
+ * @param {string} planText
+ * @returns {{ plan: string, relevantFiles: string[] }}
+ */
+function extractPlanAndFiles(planText) {
+  const lines = planText.split("\n")
+  const filesLine = lines.findLast((l) =>
+    l.trim().toUpperCase().startsWith("FILES:"),
+  )
+
+  if (!filesLine) return { plan: planText, relevantFiles: [] }
+
+  const relevantFiles = filesLine
+    .replace(/^FILES:/i, "")
+    .split(",")
+    .map((f) => f.trim())
+    .filter(Boolean)
+
+  // Remove the FILES: line from the plan shown to the user
+  const plan = lines
+    .filter((l) => l !== filesLine)
+    .join("\n")
+    .trimEnd()
+  return { plan, relevantFiles }
+}
+
+/**
  * Given a task and project context, return an implementation plan.
  * @param {string} task
  * @param {string} projectContext
- * @param {string|null} skillsIndex  Raw content of SKILL.md, if available
- * @returns {Promise<{ plan: string, selectedSkills: string[] }>}
+ * @param {string|null} skillsIndex
+ * @returns {Promise<{ plan: string, selectedSkills: string[], relevantFiles: string[] }>}
  */
 export async function plan(task, projectContext, skillsIndex = null) {
-  // ── Step 1: select relevant skills (only if skills are available) ──────────
+  // ── Step 1: select relevant skills ────────────────────────────────────────
   let selectedSkills = []
   if (skillsIndex) {
     console.log("🧠 Planner selecting relevant skills...")
@@ -55,7 +84,12 @@ export async function plan(task, projectContext, skillsIndex = null) {
   // ── Step 2: produce the implementation plan ────────────────────────────────
   console.log("🧠 Planner thinking...")
   const user = `## Task\n${task}\n\n## Codebase\n${projectContext}\n\nProduce the implementation plan.`
-  const implementationPlan = await chat(MODELS.planner, SYSTEM, user)
+  const raw = await chat(MODELS.planner, SYSTEM, user)
+  const { plan: implementationPlan, relevantFiles } = extractPlanAndFiles(raw)
 
-  return { plan: implementationPlan, selectedSkills }
+  if (relevantFiles.length > 0) {
+    console.log(`  ✓ Relevant files: ${relevantFiles.join(", ")}`)
+  }
+
+  return { plan: implementationPlan, selectedSkills, relevantFiles }
 }
